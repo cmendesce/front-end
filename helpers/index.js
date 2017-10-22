@@ -1,6 +1,15 @@
 (function (){
   'use strict';
-
+  var CLSContext = require('zipkin-context-cls');
+  var {Tracer} = require('zipkin');
+  var {restInterceptor} = require('zipkin-instrumentation-cujojs-rest');
+  var {recorder} = require("./recorder");
+  
+  var ctxImpl = new CLSContext("zipkin");
+  var tracer = new Tracer({ctxImpl, recorder});
+  
+  var rest = require("rest");
+  var trackedRequest = rest.wrap(restInterceptor, {tracer, serviceName: 'front-end'});
   var request = require("request");
   var helpers = {};
 
@@ -76,10 +85,9 @@
    * });
    */
   helpers.simpleHttpRequest = function(url, res, next) {
-    request.get(url, function(error, response, body) {
-      if (error) return next(error);
-      helpers.respondSuccessBody(res, body);
-    }.bind({res: res}));
+    trackedRequest(url)
+      .then(response => helpers.respondSuccessBody(res, response.entity))
+      .catch(err => next(err));
   }
 
   /* TODO: Add documentation */

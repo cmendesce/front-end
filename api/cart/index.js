@@ -3,7 +3,7 @@
 
   var async     = require("async")
     , express   = require("express")
-    , request   = require("request")
+    , request  = require("../../helpers/zipkin-request")
     , helpers   = require("../../helpers")
     , endpoints = require("../endpoints")
     , app       = express()
@@ -13,12 +13,9 @@
     console.log("Request received: " + req.url + ", " + req.query.custId);
     var custId = helpers.getCustomerId(req, app.get("env"));
     console.log("Customer ID: " + custId);
-    request(endpoints.cartsUrl + "/" + custId + "/items", function (error, response, body) {
-      if (error) {
-        return next(error);
-      }
-      helpers.respondStatusBody(res, response.statusCode, body)
-    });
+    request(endpoints.cartsUrl + "/" + custId + "/items")
+      .then(response => response.json())
+      .then(body => helpers.respondSuccessBody(res, JSON.stringify(body)));
   });
 
   // Delete cart
@@ -26,16 +23,14 @@
     var custId = helpers.getCustomerId(req, app.get("env"));
     console.log('Attempting to delete cart for user: ' + custId);
     var options = {
-      uri: endpoints.cartsUrl + "/" + custId,
       method: 'DELETE'
     };
-    request(options, function (error, response, body) {
-      if (error) {
-        return next(error);
-      }
-      console.log('User cart deleted with status: ' + response.statusCode);
-      helpers.respondStatus(res, response.statusCode);
-    });
+    request(endpoints.cartsUrl + "/" + custId, options)
+      .then(response => {
+        console.log('User cart deleted with status: ' + response.statusCode);
+        helpers.respondStatus(res, response.status);
+      })
+      .catch(error => next(error));
   });
 
   // Delete item from cart
@@ -49,16 +44,14 @@
     var custId = helpers.getCustomerId(req, app.get("env"));
 
     var options = {
-      uri: endpoints.cartsUrl + "/" + custId + "/items/" + req.params.id.toString(),
       method: 'DELETE'
     };
-    request(options, function (error, response, body) {
-      if (error) {
-        return next(error);
-      }
-      console.log('Item deleted with status: ' + response.statusCode);
-      helpers.respondStatus(res, response.statusCode);
-    });
+    request(endpoints.cartsUrl + "/" + custId + "/items/" + req.params.id.toString(), options)
+      .then(response => {
+        console.log('Item deleted with status: ' + response.statusCode);
+        helpers.respondStatus(res, response.status);
+      })
+      .catch(error => next(error));
   });
 
   // Add new item to cart
@@ -74,33 +67,35 @@
 
     async.waterfall([
         function (callback) {
-          request(endpoints.catalogueUrl + "/catalogue/" + req.body.id.toString(), function (error, response, body) {
-            console.log(body);
-            callback(error, JSON.parse(body));
-          });
+          request(endpoints.catalogueUrl + "/catalogue/" + req.body.id.toString())
+            .then(response => response.json())
+            .then(body => {
+              console.log(body);
+              callback(null, body);
+            })
+            .catch(error => {
+              console.log(error);
+              callback(error, null);
+            });
         },
         function (item, callback) {
           var options = {
             uri: endpoints.cartsUrl + "/" + custId + "/items",
             method: 'POST',
-            json: true,
-            body: {itemId: item.id, unitPrice: item.price}
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({itemId: item.id, unitPrice: item.price})
           };
           console.log("POST to carts: " + options.uri + " body: " + JSON.stringify(options.body));
-          request(options, function (error, response, body) {
-            if (error) {
-              callback(error)
-                return;
-            }
-            callback(null, response.statusCode);
-          });
+          request(options.uri, options)
+            .then(response => callback(null, response.status))
+            .catch(error => callback(error));
         }
     ], function (err, statusCode) {
       if (err) {
         return next(err);
       }
       if (statusCode != 201) {
-        return next(new Error("Unable to add to cart. Status code: " + statusCode))
+        return next(new Error("Unable to add to cart. Status code: " + statusCode));
       }
       helpers.respondStatus(res, statusCode);
     });
@@ -122,26 +117,22 @@
 
     async.waterfall([
         function (callback) {
-          request(endpoints.catalogueUrl + "/catalogue/" + req.body.id.toString(), function (error, response, body) {
-            console.log(body);
-            callback(error, JSON.parse(body));
-          });
+          request(endpoints.catalogueUrl + "/catalogue/" + req.body.id.toString())
+            .then(response => response.json())
+            .then(body => callback(null, body))
+            .catch(error => callback(error, null));
         },
         function (item, callback) {
           var options = {
             uri: endpoints.cartsUrl + "/" + custId + "/items",
             method: 'PATCH',
-            json: true,
-            body: {itemId: item.id, quantity: parseInt(req.body.quantity), unitPrice: item.price}
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({itemId: item.id, quantity: parseInt(req.body.quantity), unitPrice: item.price})
           };
           console.log("PATCH to carts: " + options.uri + " body: " + JSON.stringify(options.body));
-          request(options, function (error, response, body) {
-            if (error) {
-              callback(error)
-                return;
-            }
-            callback(null, response.statusCode);
-          });
+          request(options.uri, options)
+            .then(response => callback(null, response.status))
+            .catch(error => callback(error));
         }
     ], function (err, statusCode) {
       if (err) {

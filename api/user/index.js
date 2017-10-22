@@ -1,8 +1,8 @@
 (function() {
     'use strict';
 
-    var async = require("async"), express = require("express"), request = require("request"), endpoints = require("../endpoints"), helpers = require("../../helpers"), app = express(), cookie_name = "logged_in"
-
+    var async = require("async"), express = require("express"), endpoints = require("../endpoints"), helpers = require("../../helpers"), app = express(), cookie_name = "logged_in"
+    var request = require("../../helpers/zipkin-request")
 
     app.get("/customers/:id", function(req, res, next) {
         helpers.simpleHttpRequest(endpoints.customersUrl + "/" + req.session.customerId, res, next);
@@ -24,208 +24,138 @@
     // Create Customer - TO BE USED FOR TESTING ONLY (for now)
     app.post("/customers", function(req, res, next) {
         var options = {
-            uri: endpoints.customersUrl,
-            method: 'POST',
-            json: true,
-            body: req.body
+            method: 'POST', 
+            body: JSON.stringify(req.body)
         };
-
         console.log("Posting Customer: " + JSON.stringify(req.body));
 
-        request(options, function(error, response, body) {
-            if (error) {
-                return next(error);
-            }
-            helpers.respondSuccessBody(res, JSON.stringify(body));
-        }.bind({
-            res: res
-        }));
+        request(endpoints.customersUrl, options)
+            .then(() => helpers.respondSuccessBody(res, JSON.stringify(req.body)))
+            .catch(err => next(err));
     });
 
     app.post("/addresses", function(req, res, next) {
         req.body.userID = helpers.getCustomerId(req, app.get("env"));
-
         var options = {
-            uri: endpoints.addressUrl,
             method: 'POST',
-            json: true,
-            body: req.body
+            body: JSON.stringify(req.body)
         };
         console.log("Posting Address: " + JSON.stringify(req.body));
-        request(options, function(error, response, body) {
-            if (error) {
-                return next(error);
-            }
-            helpers.respondSuccessBody(res, JSON.stringify(body));
-        }.bind({
-            res: res
-        }));
+        request(endpoints.addressUrl, options)
+            .then(response => response.json())
+            .then(body => helpers.respondSuccessBody(res, JSON.stringify(body)))
+            .catch(error => next(error));
     });
 
     app.get("/card", function(req, res, next) {
         var custId = helpers.getCustomerId(req, app.get("env"));
-        var options = {
-            uri: endpoints.customersUrl + '/' + custId + '/cards',
-            method: 'GET',
-        };
-        request(options, function(error, response, body) {
-            if (error) {
-                return next(error);
-            }
-            var data = JSON.parse(body);
-            if (data.status_code !== 500 && data._embedded.card.length !== 0 ) {
-                var resp = {
-                    "number": data._embedded.card[0].longNum.slice(-4)
-                };
-                return helpers.respondSuccessBody(res, JSON.stringify(resp));
-            }
-            return helpers.respondSuccessBody(res, JSON.stringify({"status_code": 500}));
-        }.bind({
-            res: res
-        }));
+        request(endpoints.customersUrl + '/' + custId + '/cards')
+            .then(response => response.json())
+            .then(data => {
+                if (data.status_code !== 500 && data._embedded.card.length !== 0 ) {
+                    var resp = {
+                        "number": data._embedded.card[0].longNum.slice(-4)
+                    };
+                    return helpers.respondSuccessBody(res, JSON.stringify(resp));
+                }
+                return helpers.respondSuccessBody(res, JSON.stringify({"status_code": 500}));
+            })
+            .catch(error => {
+                console.log(error)
+                next(error)
+            });
     });
 
     app.get("/address", function(req, res, next) {
         var custId = helpers.getCustomerId(req, app.get("env"));
-        var options = {
-            uri: endpoints.customersUrl + '/' + custId + '/addresses',
-            method: 'GET',
-        };
-        request(options, function(error, response, body) {
-            if (error) {
-                return next(error);
-            }
-            var data = JSON.parse(body);
-            if (data.status_code !== 500 && data._embedded.address.length !== 0 ) {
-                var resp = data._embedded.address[0];
-                return helpers.respondSuccessBody(res, JSON.stringify(resp));
-            }
-            return helpers.respondSuccessBody(res, JSON.stringify({"status_code": 500}));
-        }.bind({
-            res: res
-        }));
+        request(endpoints.customersUrl + '/' + custId + '/addresses')
+            .then(response => response.json())
+            .then(body => {
+                if (body.status_code !== 500 && body._embedded.address.length !== 0 ) {
+                    var resp = body._embedded.address[0];
+                    return helpers.respondSuccessBody(res, JSON.stringify(resp));
+                }
+                return helpers.respondSuccessBody(res, JSON.stringify({"status_code": 500}));
+            })
+            .catch(error => next(error));
     });
 
     app.post("/cards", function(req, res, next) {
         req.body.userID = helpers.getCustomerId(req, app.get("env"));
-
         var options = {
-            uri: endpoints.cardsUrl,
             method: 'POST',
-            json: true,
-            body: req.body
+            body: JSON.stringify(req.body)
         };
         console.log("Posting Card: " + JSON.stringify(req.body));
-        request(options, function(error, response, body) {
-            if (error) {
-                return next(error);
-            }
-            helpers.respondSuccessBody(res, JSON.stringify(body));
-        }.bind({
-            res: res
-        }));
+        request(endpoints.cardsUrl, options)
+            .then(response => response.json())
+            .then(body => helpers.respondSuccessBody(res, JSON.stringify(body)))
+            .catch(error => next(error));
     });
 
     // Delete Customer - TO BE USED FOR TESTING ONLY (for now)
     app.delete("/customers/:id", function(req, res, next) {
         console.log("Deleting Customer " + req.params.id);
         var options = {
-            uri: endpoints.customersUrl + "/" + req.params.id,
             method: 'DELETE'
         };
-        request(options, function(error, response, body) {
-            if (error) {
-                return next(error);
-            }
-            helpers.respondSuccessBody(res, JSON.stringify(body));
-        }.bind({
-            res: res
-        }));
+        request(endpoints.customersUrl + "/" + req.params.id, options)
+            .then(response => response.json())
+            .then(body => helpers.respondSuccessBody(res, JSON.stringify(body)))
+            .catch(error => next(error));
     });
 
     // Delete Address - TO BE USED FOR TESTING ONLY (for now)
     app.delete("/addresses/:id", function(req, res, next) {
         console.log("Deleting Address " + req.params.id);
         var options = {
-            uri: endpoints.addressUrl + "/" + req.params.id,
             method: 'DELETE'
         };
-        request(options, function(error, response, body) {
-            if (error) {
-                return next(error);
-            }
-            helpers.respondSuccessBody(res, JSON.stringify(body));
-        }.bind({
-            res: res
-        }));
+        request(endpoints.addressUrl + "/" + req.params.id, options)
+            .then(response => response.json())
+            .then(body => helpers.respondSuccessBody(res, JSON.stringify(body)))
+            .catch(error => next(error));
     });
 
     // Delete Card - TO BE USED FOR TESTING ONLY (for now)
     app.delete("/cards/:id", function(req, res, next) {
         console.log("Deleting Card " + req.params.id);
         var options = {
-            uri: endpoints.cardsUrl + "/" + req.params.id,
             method: 'DELETE'
         };
-        request(options, function(error, response, body) {
-            if (error) {
-                return next(error);
-            }
-            helpers.respondSuccessBody(res, JSON.stringify(body));
-        }.bind({
-            res: res
-        }));
+        request(endpoints.cardsUrl + "/" + req.params.id, options)
+            .then(response => response.json())
+            .then(body => helpers.respondSuccessBody(res, JSON.stringify(body)))
+            .catch(error => next(error));
     });
 
     app.post("/register", function(req, res, next) {
-        var options = {
-            uri: endpoints.registerUrl,
-            method: 'POST',
-            json: true,
-            body: req.body
-        };
-
         console.log("Posting Customer: " + JSON.stringify(req.body));
-
         async.waterfall([
                 function(callback) {
-                    request(options, function(error, response, body) {
-                        if (error !== null ) {
-                            callback(error);
-                            return;
-                        }
-                        if (response.statusCode == 200 && body != null && body != "") {
-                            if (body.error) {
-                                callback(body.error);
-                                return;
-                            }
-                            console.log(body);
-                            var customerId = body.id;
-                            console.log(customerId);
-                            req.session.customerId = customerId;
-                            callback(null, customerId);
-                            return;
-                        }
-                        console.log(response.statusCode);
-                        callback(true);
-                    });
+                    request(endpoints.registerUrl, {
+                        method: 'POST',
+                        body: JSON.stringify(req.body)
+                    }).then(response => {
+                        return response.json();
+                    }).then(body => {
+                        var customerId = body.id;
+                        console.log('customerId=', customerId);
+                        req.session.customerId = customerId;
+                        callback(null, customerId);
+                    }).catch(err => callback(err));
                 },
                 function(custId, callback) {
                     var sessionId = req.session.id;
                     console.log("Merging carts for customer id: " + custId + " and session id: " + sessionId);
 
-                    var options = {
-                        uri: endpoints.cartsUrl + "/" + custId + "/merge" + "?sessionId=" + sessionId,
-                        method: 'GET'
-                    };
-                    request(options, function(error, response, body) {
-                        if (error) {
-                            if(callback) callback(error);
-                            return;
-                        }
+                    var uri = endpoints.cartsUrl + "/" + custId + "/merge" + "?sessionId=" + sessionId;
+                    request(uri).then(() => {
                         console.log('Carts merged.');
-                        if(callback) callback(null, custId);
-                    });
+                        if (callback) {
+                            callback(null, custId);
+                        } 
+                    }).catch(error => callback(error));
                 }
             ],
             function(err, custId) {
@@ -252,46 +182,32 @@
 
         async.waterfall([
                 function(callback) {
-                    var options = {
-                        headers: {
-                            'Authorization': req.get('Authorization')
-                        },
-                        uri: endpoints.loginUrl
+                    var headers = {
+                        'Authorization': req.get('Authorization')
                     };
-                    request(options, function(error, response, body) {
-                        if (error) {
-                            callback(error);
-                            return;
-                        }
-                        if (response.statusCode == 200 && body != null && body != "") {
-                            console.log(body);
-                            var customerId = JSON.parse(body).user.id;
-                            console.log(customerId);
-                            req.session.customerId = customerId;
-                            callback(null, customerId);
-                            return;
-                        }
-                        console.log(response.statusCode);
-                        callback(true);
-                    });
+                    request(endpoints.loginUrl, {headers}).then(response => response.json()).then(body => {
+                        console.log(body);
+                        var customerId = body.user.id;
+                        console.log(customerId);
+                        req.session.customerId = customerId;
+                        callback(null, customerId);
+                    }).catch(err => {
+                        console.err(err)
+                        callback(err)
+                    })
                 },
                 function(custId, callback) {
                     var sessionId = req.session.id;
                     console.log("Merging carts for customer id: " + custId + " and session id: " + sessionId);
+                    var url = endpoints.cartsUrl + "/" + custId + "/merge" + "?sessionId=" + sessionId;
 
-                    var options = {
-                        uri: endpoints.cartsUrl + "/" + custId + "/merge" + "?sessionId=" + sessionId,
-                        method: 'GET'
-                    };
-                    request(options, function(error, response, body) {
-                        if (error) {
-                            // if cart fails just log it, it prevenst login
-                            console.log(error);
-                            //return;
-                        }
+                    request(url).then(() => {
                         console.log('Carts merged.');
                         callback(null, custId);
-                    });
+                    }).catch(err => {
+                        callback(err)
+                        console.log(err);
+                    })
                 }
             ],
             function(err, custId) {
